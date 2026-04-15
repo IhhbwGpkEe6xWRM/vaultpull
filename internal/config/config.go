@@ -1,61 +1,68 @@
+// Package config loads and validates vaultpull runtime configuration.
 package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 )
 
-// Config holds all configuration for vaultpull.
+// Config holds all configuration required for a vaultpull run.
 type Config struct {
 	VaultAddr  string
 	VaultToken string
+	SecretPath string
 	Namespace  string
 	OutputFile string
-	SecretPath string
+	Quiet      bool
+	AuditLog   string
 }
 
-// Load reads configuration from environment variables with optional overrides.
+// Load reads configuration from environment variables, applying any
+// overrides supplied via the opts map (key = env var name, value = override).
 func Load(overrides map[string]string) (*Config, error) {
+	get := func(key string) string {
+		return getEnvOrOverride(key, overrides)
+	}
+
 	cfg := &Config{
-		VaultAddr:  getEnvOrOverride("VAULT_ADDR", overrides),
-		VaultToken: getEnvOrOverride("VAULT_TOKEN", overrides),
-		Namespace:  getEnvOrOverride("VAULT_NAMESPACE", overrides),
-		OutputFile: getEnvOrOverride("VAULTPULL_OUTPUT", overrides),
-		SecretPath: getEnvOrOverride("VAULTPULL_SECRET_PATH", overrides),
+		VaultAddr:  get("VAULT_ADDR"),
+		VaultToken: get("VAULT_TOKEN"),
+		SecretPath: get("VAULTPULL_SECRET_PATH"),
+		Namespace:  strings.Trim(get("VAULTPULL_NAMESPACE"), "/"),
+		OutputFile: get("VAULTPULL_OUTPUT_FILE"),
+		AuditLog:   get("VAULTPULL_AUDIT_LOG"),
+		Quiet:      get("VAULTPULL_QUIET") == "true",
 	}
 
-	if err := cfg.validate(); err != nil {
-		return nil, err
+	if cfg.VaultAddr == "" {
+		return nil, errors.New("config: VAULT_ADDR is required")
 	}
-
+	if cfg.VaultToken == "" {
+		return nil, errors.New("config: VAULT_TOKEN is required")
+	}
+	if cfg.SecretPath == "" {
+		return nil, errors.New("config: VAULTPULL_SECRET_PATH is required")
+	}
 	if cfg.OutputFile == "" {
 		cfg.OutputFile = ".env"
 	}
 
-	cfg.Namespace = strings.Trim(cfg.Namespace, "/")
-
 	return cfg, nil
 }
 
-func (c *Config) validate() error {
-	if c.VaultAddr == "" {
-		return errors.New("VAULT_ADDR is required")
-	}
-	if c.VaultToken == "" {
-		return errors.New("VAULT_TOKEN is required")
-	}
-	if c.SecretPath == "" {
-		return errors.New("VAULTPULL_SECRET_PATH is required")
+// Validate performs additional semantic validation beyond presence checks.
+func (c *Config) Validate() error {
+	if !strings.HasPrefix(c.VaultAddr, "http://") && !strings.HasPrefix(c.VaultAddr, "https://") {
+		return fmt.Errorf("config: VAULT_ADDR must start with http:// or https://, got %q", c.VaultAddr)
 	}
 	return nil
 }
 
 func getEnvOrOverride(key string, overrides map[string]string) string {
-	if overrides != nil {
-		if val, ok := overrides[key]; ok {
-			return val
-		}
+	if v, ok := overrides[key]; ok {
+		return v
 	}
 	return os.Getenv(key)
 }
