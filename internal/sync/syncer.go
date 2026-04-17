@@ -1,88 +1,84 @@
 package sync
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/example/vaultpull/internal/audit"
-	"github.com/example/vaultpull/internal/cache"
-	"github.com/example/vaultpull/internal/config"
-	"github.com/example/vaultpull/internal/env"
-	"github.com/example/vaultpull/internal/filter"
-	"github.com/example/vaultpull/internal/output"
+	"github.com/your-org/vaultpull/internal/backup"
+	"github.com/your-org/vaultpull/internal/config"
+	"github.com/your-org/vaultpull/internal/env"
+	"github.com/your-org/vaultpull/internal/filter"
+	"github.com/your-org/vaultpull/internal/output"
+	"github.com/your-org/vaultpull/internal/validate"
 )
 
-// SecretReader fetches secrets from a remote source.
-type SecretReader interface {
-	ReadSecrets(path string) (map[string]string, error)
+// SecretsReader fetches secrets from Vault.
+type SecretsReader interface {
+	ReadSecrets(ctx context.Context, path string) (map[string]string, error)
 }
 
-// Syncer orchestrates reading secrets and writing .env files.
+// Syncer orchestrates pulling secrets from Vault and writing them locally.
 type Syncer struct {
 	cfg     *config.Config
-	reader  SecretReader
+	reader  SecretsReader
 	writer  *env.Writer
+	out     *output.Formatter
 	matcher *filter.Matcher
-	fmt     *output.Formatter
-	audit   *audit.Logger
-	cache   *cache.Store
+	backups *backup.Store
 }
 
-// New builds a Syncer from a validated Config using real implementations.
-func New(cfg *config.Config) (*Syncer, error) {
-	return NewWithDeps(cfg, nil, nil, nil, nil, nil)
-}
-
-// NewWithDeps constructs a Syncer with injectable dependencies (useful in tests).
-func NewWithDeps(
-	cfg *config.Config,
-	reader SecretReader,
-	writer *env.Writer,
-	fmt *output.Formatter,
-	log *audit.Logger,
-	store *cache.Store,
-) (*Syncer, error) {
-	matcher, err := filter.NewMatcher(cfg.Namespace)
+// New creates a Syncer wired to real dependencies.
+func New(cfg *config.Config, reader SecretsReader) (*Syncer, error) {
+	w, err := env.NewWriter(cfg.OutputFile)
 	if err != nil {
-		return nil, fmt.Errorf("filter: %w", err)
+		return nil, err
 	}
-	return &Syncer{
-		cfg:     cfg,
-		reader:  reader,
-		writer:  writer,
-		matcher: matcher,
-		fmt:     fmt,
-		audit:   log,
-		cache:   store,
-	}, nil
+	return NewWithDeps(cfg, reader, w, output.New(cfg.Quiet), nil)
 }
 
-// Run fetches secrets and writes the .env file, skipping if the cache is fresh.
-func (s *Syncer) Run() error {
-	if !s.matcher.Match(s.cfg.SecretPath) {
-		s.fmt.Info("skipping %s (namespace filter)", s.cfg.SecretPath)
-		return nil
+// NewWithDeps creates a Syncer with explicit dependencies (useful in tests).
+func NewWithDeps(cfg *config.Config, reader SecretsReader, writer *env.Writer, out *output.Formatter, bk *backup.Store) (*Syncer, error) {
+	m, err := filter.NewMatcher(cfg.Namespace)
+	if err != nil {
+		return nil, fmt.Errorf("syncer: namespace matcher: %w", err)
 	}
+	return &Syncer{cfg: cfg, reader: reader, writer: writer, out: out, matcher: m, backups: bk}, nil
+}
 
-	secrets, err := s.reader.ReadSecrets(s.cfg.SecretPath)
+// Run executes the sync: read → filter → validate → backup → write.
+func (s *Syncer) Run(ctx context.Context) error {
+	s.out.Info("Fetching secrets from %s", s.cfg.SecretPath)
+
+	secrets, err := s.reader.ReadSecrets(ctx, s.cfg.SecretPath)
 	if err != nil {
 		return fmt.Errorf("read secrets: %w", err)
 	}
 
-	if s.cache != nil && s.cache.IsFresh(s.cfg.SecretPath, secrets) {
-		s.fmt.Info("cache hit for %s — skipping write", s.cfg.SecretPath)
-		return nil
+	filtered := make(map[string]string)
+	for k, v := range secrets {
+		if s.matcher.Match(k) {
+			filtered[k] = v
+		}
 	}
 
-	if err := s.writer.Write(s.cfg.OutputFile, secrets); err != nil {
+	if issues := validate.Secrets(filtered); len(issues) > 0 {
+		for _, iss := range issues {
+			s.out.Warn("%s", iss)
+		}
+	}
+
+	if s.backups != nil {
+		if bak, berr := s.backups.Save(s.cfg.OutputFile); berr != nil {
+			s.out.Warn("backup failed: %v", berr)
+		} else if bak != "" {
+			s.out.Info("Backup saved to %s", bak)
+		}
+	}
+
+	if err := s.writer.Write(filtered); err != nil {
 		return fmt.Errorf("write env: %w", err)
 	}
 
-	if s.cache != nil {
-		s.cache.Set(s.cfg.SecretPath, secrets)
-		_ = s.cache.Save()
-	}
-
-	s.audit.Record(s.cfg.SecretPath, "synced", len(secrets))
-	s.fmt.Success("wrote %d secrets to %s", len(secrets), s.cfg.OutputFile)
+	s.out.Success("Wrote %d secrets to %s", len(filtered), s.cfg.OutputFile)
 	return nil
 }
