@@ -49,3 +49,13 @@ func Summary(events []Event) string {
 	}
 	return fmt.Sprintf("%d secret(s) rotated", len(events))
 }
+
+// Keys returns a slice of the key names from the given events.
+// This is useful for logging or filtering which secrets were rotated.
+func Keys(events []Event) []string {
+	keys := make([]string, len(events))
+	for i, e := range events {
+		keys[i] = e.Key
+	}
+	return keys
+}
