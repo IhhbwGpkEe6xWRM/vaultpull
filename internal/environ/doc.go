@@ -1,7 +1,4 @@
-// Package environ provides utilities for loading environment variables
-// into secret maps and merging them with secrets fetched from Vault.
-//
-// It supports optional prefix filtering so only a scoped subset of the
-// host environment is considered, and a configurable override flag that
-// controls whether local env values win over Vault-sourced ones.
+// Package environ provides utilities for loading and merging environment
+// variables with Vault secrets. It supports prefix-based filtering and
+// conflict resolution strategies when both sources define the same key.
 package environ
