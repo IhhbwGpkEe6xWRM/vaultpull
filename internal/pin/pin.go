@@ -70,6 +70,17 @@ func (s *Store) Remove(path string) error {
 	return s.save()
 }
 
+// List returns all current pin entries as a slice.
+func (s *Store) List() []Entry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entries := make([]Entry, 0, len(s.data))
+	for _, e := range s.data {
+		entries = append(entries, e)
+	}
+	return entries
+}
+
 func (s *Store) save() error {
 	f, err := os.Create(s.path)
 	if err != nil {
