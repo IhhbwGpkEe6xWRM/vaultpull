@@ -77,3 +77,16 @@ func TestConfirm_PrintsOptions(t *testing.T) {
 		t.Fatalf("expected [y/N] hint in output: %q", out.String())
 	}
 }
+
+// TestConfirm_YesMixedCase verifies that mixed-case variants of "yes" are
+// accepted as affirmative answers.
+func TestConfirm_YesMixedCase(t *testing.T) {
+	cases := []string{"Yes\n", "YeS\n", "yES\n"}
+	for _, input := range cases {
+		c, _ := newTestConfirmer(input)
+		ok, err := c.Confirm("overwrite?")
+		if err != nil || !ok {
+			t.Errorf("expected true for input %q, got ok=%v err=%v", input, ok, err)
+		}
+	}
+}
