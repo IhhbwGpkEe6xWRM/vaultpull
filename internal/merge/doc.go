@@ -9,4 +9,12 @@
 //
 // All conflicts are recorded in the Result regardless of strategy (except
 // ErrorOnConflict, which halts processing immediately).
+//
+// # Example
+//
+//	result, err := merge.Merge(merge.LastWins, maps...)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	fmt.Println(result.Merged)
 package merge
