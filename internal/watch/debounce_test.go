@@ -65,3 +65,20 @@ func TestDebounce_ForwardsAfterQuiet(t *testing.T) {
 		t.Errorf("expected 2 events (one per quiet period), got %d", len(out))
 	}
 }
+
+// TestDebounce_EmptyInput verifies that closing the input channel with no
+// events results in no output events being emitted.
+func TestDebounce_EmptyInput(t *testing.T) {
+	in := make(chan Event)
+	out := make(chan Event, 4)
+
+	d := NewDebouncer(20 * time.Millisecond)
+	go d.Run(in, out)
+
+	close(in)
+	time.Sleep(60 * time.Millisecond)
+
+	if len(out) != 0 {
+		t.Errorf("expected 0 events for empty input, got %d", len(out))
+	}
+}
