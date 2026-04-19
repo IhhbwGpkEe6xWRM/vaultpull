@@ -11,5 +11,10 @@
 //	f.Info("reading secrets from vault...")
 //	f.Summary(".env", len(secrets), cfg.Namespace != "")
 //
-// For testing, use NewWithWriters to inject custom io.Writer instances.
+// For testing, use NewWithWriters to inject custom io.Writer instances:
+//
+//	var buf bytes.Buffer
+//	f := output.NewWithWriters(&buf, &buf)
+//	f.Info("test message")
+//	// inspect buf.String() for expected output
 package output
