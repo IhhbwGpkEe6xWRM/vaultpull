@@ -10,6 +10,11 @@
 // and are keyed by the full secret path. Each entry records the
 // target version, the time it was pinned, and an optional actor.
 //
+// Listing and removing pins:
+//
+//	pins := store.List()          // returns all current pin entries
+//	store.Remove("secret/myapp/prod") // removes a pin, allowing normal sync
+//
 // Usage:
 //
 //	store, err := pin.NewStore(".vaultpull-pins.json")
