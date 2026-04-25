@@ -37,6 +37,18 @@ func TestApply_AddsPrefixToAllKeys(t *testing.T) {
 	}
 }
 
+func TestApply_DoesNotMutateSource(t *testing.T) {
+	tx := envprefix.New("SVC")
+	src := map[string]string{"DB_HOST": "localhost"}
+	_ = tx.Apply(src)
+	if _, ok := src["SVC_DB_HOST"]; ok {
+		t.Error("Apply must not mutate the source map")
+	}
+	if _, ok := src["DB_HOST"]; !ok {
+		t.Error("Apply must preserve original keys in source map")
+	}
+}
+
 func TestStrip_RemovesPrefixFromMatchingKeys(t *testing.T) {
 	tx := envprefix.New("SVC")
 	src := map[string]string{"SVC_DB_HOST": "localhost", "OTHER": "x"}
