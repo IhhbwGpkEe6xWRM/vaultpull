@@ -82,3 +82,13 @@ func TestCompare_MixedChanges(t *testing.T) {
 		t.Fatalf("expected 1/1/1 got added=%d removed=%d modified=%d", a, rem, m)
 	}
 }
+
+func TestCompare_EmptyBoth(t *testing.T) {
+	r := diff.Compare(map[string]string{}, map[string]string{})
+	if r.HasChanges() {
+		t.Fatal("expected no changes for two empty maps")
+	}
+	if len(r.Changes) != 0 {
+		t.Fatalf("expected empty changes slice, got %d entries", len(r.Changes))
+	}
+}
