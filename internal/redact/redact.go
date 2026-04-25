@@ -12,7 +12,7 @@ var DefaultSensitivePatterns = []string{
 
 // Redactor scrubs values whose keys match sensitive patterns.
 type Redactor struct {
-	patterns []string
+	patterns    []string
 	placeholder string
 }
 
@@ -52,4 +52,17 @@ func (r *Redactor) Redact(m map[string]string) map[string]string {
 		}
 	}
 	return out
+}
+
+// RedactedKeys returns the list of keys in m that would be redacted.
+// This is useful for logging which fields were scrubbed without
+// revealing their values.
+func (r *Redactor) RedactedKeys(m map[string]string) []string {
+	keys := make([]string, 0)
+	for k := range m {
+		if r.IsSensitive(k) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
